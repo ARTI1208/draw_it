@@ -46,6 +46,8 @@ class PainterState extends State<PainterWidget> {
   Color color = Colors.black;
   double strokeWidth = 5;
 
+  bool filled = true;
+
   List<Tuple2<Path, Paint>> toDraw = [];
 
   List<Tuple2<Path, Paint>> removed = [];
@@ -81,7 +83,9 @@ class PainterState extends State<PainterWidget> {
     return Paint()
       ..color = color
       ..strokeCap = StrokeCap.round
-      ..strokeWidth = strokeWidth;
+      ..strokeWidth = strokeWidth
+      ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke
+    ;
   }
 
   Paint get linePaint {
@@ -173,6 +177,7 @@ class PainterState extends State<PainterWidget> {
             pickersEnabled: pickersEnabled,
             showColorCode: true,
             enableOpacity: true,
+            enableShadesSelection: false,
             actionButtons: ColorPickerActionButtons(
               dialogActionButtons: true,
             )
@@ -316,7 +321,12 @@ class PainterState extends State<PainterWidget> {
                       toDraw.clear();
                       removed.clear();
                     });
-                  })
+                  }),
+              Checkbox(value: filled, onChanged: (newValue) {
+                setState(() {
+                  filled = newValue ?? false;
+                });
+              })
             ],
           ),
         ]);
