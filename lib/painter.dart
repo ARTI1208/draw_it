@@ -84,8 +84,7 @@ class PainterState extends State<PainterWidget> {
       ..color = color
       ..strokeCap = StrokeCap.round
       ..strokeWidth = strokeWidth
-      ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke
-    ;
+      ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke;
   }
 
   Paint get linePaint {
@@ -166,38 +165,39 @@ class PainterState extends State<PainterWidget> {
 
     Color newColor = color;
 
-    return showDialog<Color>(context: context, builder: (BuildContext context) {
-      return AlertDialog(
-        title: Text('Pick color'),
-        titlePadding: EdgeInsets.all(20),
-        content: ColorPicker(
-            color: color,
-            onColorChanged: (_) {},
-            onColorChangeEnd: (color) => newColor = color,
-            pickersEnabled: pickersEnabled,
-            showColorCode: true,
-            enableOpacity: true,
-            enableShadesSelection: false,
-            actionButtons: ColorPickerActionButtons(
-              dialogActionButtons: true,
-            )
-        ),
-        actions: <Widget>[
-          TextButton(
-            child: Text('Cancel'),
-            onPressed: () {
-              Navigator.of(context).pop(color);
-            },
-          ),
-          TextButton(
-            child: Text('OK'),
-            onPressed: () {
-              Navigator.of(context).pop(newColor);
-            },
-          ),
-        ],
-      );
-    }).then((value) => value ?? color);
+    return showDialog<Color>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Pick color'),
+            titlePadding: EdgeInsets.all(20),
+            content: ColorPicker(
+                color: color,
+                onColorChanged: (_) {},
+                onColorChangeEnd: (color) => newColor = color,
+                pickersEnabled: pickersEnabled,
+                showColorCode: true,
+                enableOpacity: true,
+                enableShadesSelection: false,
+                actionButtons: ColorPickerActionButtons(
+                  dialogActionButtons: true,
+                )),
+            actions: <Widget>[
+              TextButton(
+                child: Text('Cancel'),
+                onPressed: () {
+                  Navigator.of(context).pop(color);
+                },
+              ),
+              TextButton(
+                child: Text('OK'),
+                onPressed: () {
+                  Navigator.of(context).pop(newColor);
+                },
+              ),
+            ],
+          );
+        }).then((value) => value ?? color);
   }
 
   @override
@@ -209,7 +209,6 @@ class PainterState extends State<PainterWidget> {
               decoration: BoxDecoration(color: backgroundColor),
               child: GestureDetector(
                 onPanStart: (details) {
-
                   removed.clear();
 
                   switch (_paintType) {
@@ -244,7 +243,7 @@ class PainterState extends State<PainterWidget> {
                   }
                 },
                 child: Container(
-                  // TODO match screen
+                    // TODO match screen
                     height: 350,
                     child: CustomPaint(
                       painter: DrawPainter(toDraw),
@@ -287,13 +286,14 @@ class PainterState extends State<PainterWidget> {
                 color: color,
                 hasBorder: true,
                 onSelect: () async {
-                Color newColor = await _showColorPickerDialog();
-                if (newColor == color) return;
+                  Color newColor = await _showColorPickerDialog();
+                  if (newColor == color) return;
 
-                setState(() {
-                  color = newColor;
-                });
-              },),
+                  setState(() {
+                    color = newColor;
+                  });
+                },
+              ),
               ElevatedButton(
                   child: Text("Undo"),
                   onPressed: () {
@@ -322,11 +322,13 @@ class PainterState extends State<PainterWidget> {
                       removed.clear();
                     });
                   }),
-              Checkbox(value: filled, onChanged: (newValue) {
-                setState(() {
-                  filled = newValue ?? false;
-                });
-              })
+              Checkbox(
+                  value: filled,
+                  onChanged: (newValue) {
+                    setState(() {
+                      filled = newValue ?? false;
+                    });
+                  })
             ],
           ),
         ]);
@@ -341,10 +343,11 @@ class ToolRadioButton extends StatelessWidget {
 
   final ValueChanged<PaintType> onTypeSelected;
 
-  ToolRadioButton({required this.buttonType,
-    required this.selectedType,
-    required this.onTypeSelected,
-    required Color selectedColor})
+  ToolRadioButton(
+      {required this.buttonType,
+      required this.selectedType,
+      required this.onTypeSelected,
+      required Color selectedColor})
       : this.selectedColor = selectedColor.withAlpha(255);
 
   @override
@@ -356,18 +359,20 @@ class ToolRadioButton extends StatelessWidget {
     };
 
     if (buttonType == selectedType) {
-      return Ink(
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: selectedColor, width: 2)),
-        ),
-        child: IconButton(
-            onPressed: onPressed,
-            icon: SvgPicture.asset(
-              buttonType.imagePath,
-              height: 30,
-              color: selectedColor,
-            )),
-      );
+      return Padding(
+          padding: EdgeInsets.only(bottom: 20),
+          child: Ink(
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: selectedColor, width: 2)),
+            ),
+            child: IconButton(
+                onPressed: onPressed,
+                icon: SvgPicture.asset(
+                  buttonType.imagePath,
+                  height: 30,
+                  color: selectedColor,
+                )),
+          ));
     } else {
       return IconButton(
           onPressed: onPressed,
