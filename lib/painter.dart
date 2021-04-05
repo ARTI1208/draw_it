@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart' as fcp;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:tuple/tuple.dart';
 
@@ -86,6 +87,8 @@ extension PathOffsetExtension on Path {
 
 class PainterState extends State<PainterWidget> {
   Color color = Colors.black;
+  HSVColor hsvColor = HSVColor.fromColor(Colors.black);
+
   double strokeWidth = 5;
 
   bool filled = true;
@@ -143,7 +146,6 @@ class PainterState extends State<PainterWidget> {
   }
 
   void onPencilDraw(DragUpdateDetails details) {
-
     Path linePath = toDraw.last.item1;
 
     setState(() {
@@ -229,65 +231,72 @@ class PainterState extends State<PainterWidget> {
 
     Color newColor = color;
 
-    return showDialog<Color>(
+    Widget colorPicker = fcp.ColorPicker(
+        pickerColor: color,
+        onColorChanged: (color) {
+          stdout.writeln("PaintColor: color changed");
+
+          newColor = color;
+        });
+
+    return showModalBottomSheet<Color>(
         context: context,
         builder: (BuildContext context) {
-          return AlertDialog(
-            title: Text('Pick color'),
-            titlePadding: EdgeInsets.all(20),
-            content: ColorPicker(
-                color: color,
-                onColorChanged: (_) {},
-                onColorChangeEnd: (color) => newColor = color,
-                pickersEnabled: pickersEnabled,
-                showColorCode: true,
-                enableOpacity: true,
-                enableShadesSelection: false,
-                actionButtons: ColorPickerActionButtons(
-                  dialogActionButtons: true,
-                )),
-            actions: <Widget>[
-              TextButton(
-                child: Text('Cancel'),
-                onPressed: () {
-                  Navigator.of(context).pop(color);
-                },
-              ),
-              TextButton(
-                child: Text('OK'),
-                onPressed: () {
-                  Navigator.of(context).pop(newColor);
-                },
-              ),
-            ],
+          return Container(
+            height: 1000,
+            child: colorPicker,
           );
         }).then((value) => value ?? color);
   }
 
+  Widget createDivider(bool vertical) {
+    if (vertical) {
+      return Container(
+        height: 30,
+        child: VerticalDivider(
+          thickness: 1,
+          color: Colors.black87,
+        ),
+      );
+    } else {
+      return Container(
+        width: 30,
+        child: Divider(
+          thickness: 1,
+          color: Colors.black87,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    bool portrait = MediaQuery.of(context).orientation == Orientation.portrait;
+    Axis direction = portrait ? Axis.vertical : Axis.horizontal;
+    Axis crossDirection = portrait ? Axis.horizontal : Axis.vertical;
+
     List<Widget> buttons = <Widget>[
-          ColorIndicator(
-              color: color,
-              hasBorder: true,
+          GestureDetector(
+            onTap: () async {
+              Color newColor = await _showColorPickerDialog();
+
+              stdout.writeln("PaintColor: picker closed");
+
+              if (newColor == color) return;
+
+              setState(() {
+                stdout.writeln("PaintColor: apply new color");
+                color = newColor;
+                hsvColor = HSVColor.fromColor(newColor);
+              });
+            },
+            child: fcp.ColorIndicator(
+              hsvColor,
               height: 30,
               width: 30,
-              borderRadius: 40,
-              onSelect: () async {
-                Color newColor = await _showColorPickerDialog();
-                if (newColor == color) return;
-
-                setState(() {
-                  color = newColor;
-                });
-              }),
-          Container(
-            height: 30,
-            child: VerticalDivider(
-              thickness: 1,
-              color: Colors.black87,
             ),
           ),
+          createDivider(portrait),
           ActionButton(
               paintAction: PaintAction.UNDO,
               enabled: toDraw.isNotEmpty,
@@ -322,13 +331,7 @@ class PainterState extends State<PainterWidget> {
                   toDraw.clear();
                 });
               }),
-          Container(
-            height: 30,
-            child: VerticalDivider(
-              thickness: 1,
-              color: Colors.black87,
-            ),
-          ),
+          createDivider(portrait),
           OptionCheckButton(
               buttonOption: PaintOption.FILLED,
               selected: filled,
@@ -338,13 +341,7 @@ class PainterState extends State<PainterWidget> {
                   filled = newValue;
                 });
               }),
-          Container(
-            height: 30,
-            child: VerticalDivider(
-              thickness: 1,
-              color: Colors.black87,
-            ),
-          ),
+          createDivider(portrait),
         ] +
         List.generate(
           PaintType.values.length,
@@ -364,99 +361,103 @@ class PainterState extends State<PainterWidget> {
           },
         );
 
-    return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Expanded(
-              child: DecoratedBox(
-                  decoration: BoxDecoration(color: backgroundColor),
-                  child: GestureDetector(
-                    onPanStart: (details) {
-                      removed.clear();
 
-                      switch (_paintType) {
-                        case PaintType.PENCIL:
-                          onStartPencilDraw(details);
-                          break;
-                        case PaintType.ERASER:
-                          onStartErase(details);
-                          break;
-                        case PaintType.LINE:
-                          onStartLineDraw(details);
-                          break;
-                        case PaintType.RECTANGLE:
-                          onStartShapeDraw(details);
-                          break;
-                        case PaintType.OVAL:
-                          onStartShapeDraw(details);
-                          break;
-                      }
-                    },
-                    onPanCancel: () => onStopDraw(),
-                    onPanEnd: (_) => onStopDraw(),
-                    onPanUpdate: (details) {
-                      switch (_paintType) {
-                        case PaintType.PENCIL:
-                          onPencilDraw(details);
-                          break;
-                        case PaintType.ERASER:
-                          onErase(details);
-                          break;
-                        case PaintType.LINE:
-                          onLineDraw(details);
-                          break;
-                        case PaintType.RECTANGLE:
-                          onRectangleDraw(details);
-                          break;
-                        case PaintType.OVAL:
-                          onOvalDraw(details);
-                          break;
-                      }
-                    },
-                    child: CustomPaint(
-                      painter: DrawPainter(toDraw),
-                    ),
-                  ))),
-          // Slider(
-          //     value: strokeWidth,
-          //     min: 0.0,
-          //     max: 50.0,
-          //     onChanged: (newValue) {
-          //       setState(() {
-          //         strokeWidth = newValue;
-          //       });
-          //     }),
-          // SingleChildScrollView(
-          //     scrollDirection: Axis.horizontal,
-          //     child: ButtonBar(
-          //         mainAxisSize: MainAxisSize.max,
-          //         alignment: MainAxisAlignment.spaceEvenly,
-          //         children: buttons)),
-          DecoratedBox(
-              decoration: BoxDecoration(
-                  // color: Theme.of(context).scaffoldBackgroundColor
+    Widget slider = RotatedBox(quarterTurns: portrait ? 0 : -1, child: Slider(
+        value: strokeWidth,
+        min: 0.0,
+        max: 50.0,
+        onChanged: (newValue) {
+          setState(() {
+            strokeWidth = newValue;
+          });
+        }));
+
+    List<Widget> rootChildren = <Widget>[
+      Expanded(
+          child: DecoratedBox(
+              decoration: BoxDecoration(color: backgroundColor),
+              child: GestureDetector(
+                onPanStart: (details) {
+                  removed.clear();
+
+                  switch (_paintType) {
+                    case PaintType.PENCIL:
+                      onStartPencilDraw(details);
+                      break;
+                    case PaintType.ERASER:
+                      onStartErase(details);
+                      break;
+                    case PaintType.LINE:
+                      onStartLineDraw(details);
+                      break;
+                    case PaintType.RECTANGLE:
+                      onStartShapeDraw(details);
+                      break;
+                    case PaintType.OVAL:
+                      onStartShapeDraw(details);
+                      break;
+                  }
+                },
+                onPanCancel: () => onStopDraw(),
+                onPanEnd: (_) => onStopDraw(),
+                onPanUpdate: (details) {
+                  switch (_paintType) {
+                    case PaintType.PENCIL:
+                      onPencilDraw(details);
+                      break;
+                    case PaintType.ERASER:
+                      onErase(details);
+                      break;
+                    case PaintType.LINE:
+                      onLineDraw(details);
+                      break;
+                    case PaintType.RECTANGLE:
+                      onRectangleDraw(details);
+                      break;
+                    case PaintType.OVAL:
+                      onOvalDraw(details);
+                      break;
+                  }
+                },
+                child: CustomPaint(
+                  painter: DrawPainter(toDraw),
+                ),
+              ))),
+      // Slider(
+      //     value: strokeWidth,
+      //     min: 0.0,
+      //     max: 50.0,
+      //     onChanged: (newValue) {
+      //       setState(() {
+      //         strokeWidth = newValue;
+      //       });
+      //     }),
+      // SingleChildScrollView(
+      //     scrollDirection: Axis.horizontal,
+      //     child: ButtonBar(
+      //         mainAxisSize: MainAxisSize.max,
+      //         alignment: MainAxisAlignment.spaceEvenly,
+      //         children: buttons)),
+      DecoratedBox(
+          decoration: BoxDecoration(
+              // color: Theme.of(context).scaffoldBackgroundColor
               ),
-              child: Column(
-                children: [
-                  Slider(
-                      value: strokeWidth,
-                      min: 0.0,
-                      max: 50.0,
-                      onChanged: (newValue) {
-                        setState(() {
-                          strokeWidth = newValue;
-                        });
-                      }),
-                  SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: ButtonBar(
-                          mainAxisSize: MainAxisSize.max,
-                          alignment: MainAxisAlignment.spaceEvenly,
-                          buttonHeight: 30,
-                          children: buttons)),
-                ],
-              )),
-        ]);
+          child: Flex(
+            direction: direction,
+            children: [
+              slider,
+              SingleChildScrollView(
+                  scrollDirection: crossDirection,
+                  child: Flex(direction: crossDirection, children: buttons)),
+            ],
+          )),
+    ];
+
+    return Flex(
+      direction: direction,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: rootChildren,
+    );
   }
 }
 
