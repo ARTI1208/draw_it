@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flex_color_picker/flex_color_picker.dart';
@@ -13,7 +14,11 @@ class PainterWidget extends StatefulWidget {
   PainterState createState() => PainterState();
 }
 
-enum PaintType { PENCIL, ERASER, LINE, RECTANGLE }
+enum PaintType { PENCIL, ERASER, LINE, RECTANGLE, OVAL }
+
+enum PaintOption { FILLED }
+
+enum PaintAction { UNDO, REDO, CLEAR }
 
 extension VisualPaintType on PaintType {
   String get image {
@@ -26,6 +31,43 @@ extension VisualPaintType on PaintType {
         return "line.svg";
       case PaintType.RECTANGLE:
         return "rectangle.svg";
+      case PaintType.OVAL:
+        return "ellipse.svg";
+    }
+  }
+
+  String get imagePath => "assets/drawables/" + this.image;
+}
+
+extension VisualPaintOption on PaintOption {
+  String get _imageOff {
+    switch (this) {
+      case PaintOption.FILLED:
+        return "star_outline.svg";
+    }
+  }
+
+  String get _imageOn {
+    switch (this) {
+      case PaintOption.FILLED:
+        return "star_filled.svg";
+    }
+  }
+
+  String get imageOffPath => "assets/drawables/" + this._imageOff;
+
+  String get imageOnPath => "assets/drawables/" + this._imageOn;
+}
+
+extension VisualPaintAction on PaintAction {
+  String get image {
+    switch (this) {
+      case PaintAction.UNDO:
+        return "undo.svg";
+      case PaintAction.REDO:
+        return "redo.svg";
+      case PaintAction.CLEAR:
+        return "delete.svg";
     }
   }
 
@@ -50,7 +92,7 @@ class PainterState extends State<PainterWidget> {
 
   List<Tuple2<Path, Paint>> toDraw = [];
 
-  List<Tuple2<Path, Paint>> removed = [];
+  List<Iterable<Tuple2<Path, Paint>>> removed = [];
 
   PaintType _paintType = PaintType.PENCIL;
 
@@ -101,32 +143,36 @@ class PainterState extends State<PainterWidget> {
   }
 
   void onPencilDraw(DragUpdateDetails details) {
-    setState(() {
-      Path linePath = toDraw.last.item1;
 
+    Path linePath = toDraw.last.item1;
+
+    setState(() {
       linePath.lineTo(details.localPosition.dx, details.localPosition.dy);
     });
   }
 
   void onStartShapeDraw(DragStartDetails details) {
     shapeStart = details.localPosition;
-    setState(() {
-      Path path = Path()
-        ..moveTo(details.localPosition.dx, details.localPosition.dy);
+    Path path = Path();
+    toDraw.add(Tuple2(path, basePaint));
+  }
 
-      toDraw.add(Tuple2(path, basePaint));
-    });
+  void onStopDraw() {
+    shapeStart = null;
+
+    Path path = toDraw.last.item1;
+
+    if (path.computeMetrics().isEmpty) {
+      toDraw.removeLast();
+    }
   }
 
   void onStartLineDraw(DragStartDetails details) {
     shapeStart = details.localPosition;
 
-    Path path = Path()
-      ..moveTo(details.localPosition.dx, details.localPosition.dy);
+    Path path = Path();
 
-    setState(() {
-      toDraw.add(Tuple2(path, linePaint));
-    });
+    toDraw.add(Tuple2(path, linePaint));
   }
 
   void onLineDraw(DragUpdateDetails details) {
@@ -150,6 +196,24 @@ class PainterState extends State<PainterWidget> {
 
       linePath.reset();
       linePath.addRect(Rect.fromPoints(shapeStart!, details.localPosition));
+    });
+  }
+
+  void onOvalDraw(DragUpdateDetails details) {
+    assert(shapeStart != null);
+
+    var center = shapeStart;
+    if (center == null) return;
+
+    var width = (details.localPosition.dx - center.dx) * 2;
+    var height = (details.localPosition.dy - center.dy) * 2;
+
+    Path linePath = toDraw.last.item1;
+
+    setState(() {
+      linePath.reset();
+      linePath.addOval(
+          Rect.fromCenter(center: center, width: width, height: height));
     });
   }
 
@@ -202,135 +266,196 @@ class PainterState extends State<PainterWidget> {
 
   @override
   Widget build(BuildContext context) {
+    List<Widget> buttons = <Widget>[
+          ColorIndicator(
+              color: color,
+              hasBorder: true,
+              height: 30,
+              width: 30,
+              borderRadius: 40,
+              onSelect: () async {
+                Color newColor = await _showColorPickerDialog();
+                if (newColor == color) return;
+
+                setState(() {
+                  color = newColor;
+                });
+              }),
+          Container(
+            height: 30,
+            child: VerticalDivider(
+              thickness: 1,
+              color: Colors.black87,
+            ),
+          ),
+          ActionButton(
+              paintAction: PaintAction.UNDO,
+              enabled: toDraw.isNotEmpty,
+              // enabled: true,
+              onPressed: () {
+                if (toDraw.isEmpty) return;
+
+                setState(() {
+                  var lastPath = toDraw.removeLast();
+                  removed.add([lastPath]);
+                });
+              }),
+          ActionButton(
+              paintAction: PaintAction.REDO,
+              enabled: removed.isNotEmpty,
+              // enabled: true,
+              onPressed: () {
+                if (removed.isEmpty) return;
+
+                setState(() {
+                  var lastPath = removed.removeLast();
+                  toDraw.addAll(lastPath);
+                });
+              }),
+          ActionButton(
+              paintAction: PaintAction.CLEAR,
+              enabled: toDraw.isNotEmpty,
+              // enabled: true,
+              onPressed: () {
+                setState(() {
+                  removed.add(List.from(toDraw));
+                  toDraw.clear();
+                });
+              }),
+          Container(
+            height: 30,
+            child: VerticalDivider(
+              thickness: 1,
+              color: Colors.black87,
+            ),
+          ),
+          OptionCheckButton(
+              buttonOption: PaintOption.FILLED,
+              selected: filled,
+              selectedColor: color,
+              onOptionChanged: (newValue) {
+                setState(() {
+                  filled = newValue;
+                });
+              }),
+          Container(
+            height: 30,
+            child: VerticalDivider(
+              thickness: 1,
+              color: Colors.black87,
+            ),
+          ),
+        ] +
+        List.generate(
+          PaintType.values.length,
+          (index) {
+            PaintType type = PaintType.values[index];
+
+            return ToolRadioButton(
+              buttonType: type,
+              selectedType: _paintType,
+              selectedColor: color,
+              onTypeSelected: (newType) {
+                setState(() {
+                  _paintType = newType;
+                });
+              },
+            );
+          },
+        );
+
     return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          DecoratedBox(
-              decoration: BoxDecoration(color: backgroundColor),
-              child: GestureDetector(
-                onPanStart: (details) {
-                  removed.clear();
+          Expanded(
+              child: DecoratedBox(
+                  decoration: BoxDecoration(color: backgroundColor),
+                  child: GestureDetector(
+                    onPanStart: (details) {
+                      removed.clear();
 
-                  switch (_paintType) {
-                    case PaintType.PENCIL:
-                      onStartPencilDraw(details);
-                      break;
-                    case PaintType.ERASER:
-                      onStartErase(details);
-                      break;
-                    case PaintType.LINE:
-                      onStartLineDraw(details);
-                      break;
-                    case PaintType.RECTANGLE:
-                      onStartShapeDraw(details);
-                      break;
-                  }
-                },
-                onPanUpdate: (details) {
-                  switch (_paintType) {
-                    case PaintType.PENCIL:
-                      onPencilDraw(details);
-                      break;
-                    case PaintType.ERASER:
-                      onErase(details);
-                      break;
-                    case PaintType.LINE:
-                      onLineDraw(details);
-                      break;
-                    case PaintType.RECTANGLE:
-                      onRectangleDraw(details);
-                      break;
-                  }
-                },
-                child: Container(
-                    // TODO match screen
-                    height: 350,
+                      switch (_paintType) {
+                        case PaintType.PENCIL:
+                          onStartPencilDraw(details);
+                          break;
+                        case PaintType.ERASER:
+                          onStartErase(details);
+                          break;
+                        case PaintType.LINE:
+                          onStartLineDraw(details);
+                          break;
+                        case PaintType.RECTANGLE:
+                          onStartShapeDraw(details);
+                          break;
+                        case PaintType.OVAL:
+                          onStartShapeDraw(details);
+                          break;
+                      }
+                    },
+                    onPanCancel: () => onStopDraw(),
+                    onPanEnd: (_) => onStopDraw(),
+                    onPanUpdate: (details) {
+                      switch (_paintType) {
+                        case PaintType.PENCIL:
+                          onPencilDraw(details);
+                          break;
+                        case PaintType.ERASER:
+                          onErase(details);
+                          break;
+                        case PaintType.LINE:
+                          onLineDraw(details);
+                          break;
+                        case PaintType.RECTANGLE:
+                          onRectangleDraw(details);
+                          break;
+                        case PaintType.OVAL:
+                          onOvalDraw(details);
+                          break;
+                      }
+                    },
                     child: CustomPaint(
                       painter: DrawPainter(toDraw),
-                    )),
-              )),
-          Slider(
-              value: strokeWidth,
-              min: 0.0,
-              max: 50.0,
-              onChanged: (newValue) {
-                setState(() {
-                  strokeWidth = newValue;
-                });
-              }),
-          SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ButtonBar(
-                  mainAxisSize: MainAxisSize.max,
-                  alignment: MainAxisAlignment.spaceEvenly,
-                  // this will take space as minimum as posible(to center)
-                  children: List.generate(PaintType.values.length, (index) {
-                    PaintType type = PaintType.values[index];
-
-                    return ToolRadioButton(
-                      buttonType: type,
-                      selectedType: _paintType,
-                      selectedColor: color,
-                      onTypeSelected: (newType) {
-                        setState(() {
-                          _paintType = newType;
-                        });
-                      },
-                    );
-                  }))),
-          ButtonBar(
-            alignment: MainAxisAlignment.spaceEvenly,
-            mainAxisSize: MainAxisSize.max,
-            children: [
-              ColorIndicator(
-                color: color,
-                hasBorder: true,
-                onSelect: () async {
-                  Color newColor = await _showColorPickerDialog();
-                  if (newColor == color) return;
-
-                  setState(() {
-                    color = newColor;
-                  });
-                },
+                    ),
+                  ))),
+          // Slider(
+          //     value: strokeWidth,
+          //     min: 0.0,
+          //     max: 50.0,
+          //     onChanged: (newValue) {
+          //       setState(() {
+          //         strokeWidth = newValue;
+          //       });
+          //     }),
+          // SingleChildScrollView(
+          //     scrollDirection: Axis.horizontal,
+          //     child: ButtonBar(
+          //         mainAxisSize: MainAxisSize.max,
+          //         alignment: MainAxisAlignment.spaceEvenly,
+          //         children: buttons)),
+          DecoratedBox(
+              decoration: BoxDecoration(
+                  // color: Theme.of(context).scaffoldBackgroundColor
               ),
-              ElevatedButton(
-                  child: Text("Undo"),
-                  onPressed: () {
-                    if (toDraw.isEmpty) return;
-
-                    setState(() {
-                      var lastPath = toDraw.removeLast();
-                      removed.add(lastPath);
-                    });
-                  }),
-              ElevatedButton(
-                  child: Text("Redo"),
-                  onPressed: () {
-                    if (removed.isEmpty) return;
-
-                    setState(() {
-                      var lastPath = removed.removeLast();
-                      toDraw.add(lastPath);
-                    });
-                  }),
-              ElevatedButton(
-                  child: Text("Clear"),
-                  onPressed: () {
-                    setState(() {
-                      toDraw.clear();
-                      removed.clear();
-                    });
-                  }),
-              Checkbox(
-                  value: filled,
-                  onChanged: (newValue) {
-                    setState(() {
-                      filled = newValue ?? false;
-                    });
-                  })
-            ],
-          ),
+              child: Column(
+                children: [
+                  Slider(
+                      value: strokeWidth,
+                      min: 0.0,
+                      max: 50.0,
+                      onChanged: (newValue) {
+                        setState(() {
+                          strokeWidth = newValue;
+                        });
+                      }),
+                  SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: ButtonBar(
+                          mainAxisSize: MainAxisSize.max,
+                          alignment: MainAxisAlignment.spaceEvenly,
+                          buttonHeight: 30,
+                          children: buttons)),
+                ],
+              )),
         ]);
   }
 }
@@ -363,7 +488,8 @@ class ToolRadioButton extends StatelessWidget {
           padding: EdgeInsets.only(bottom: 20),
           child: Ink(
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: selectedColor, width: 2)),
+              border:
+                  Border(bottom: BorderSide(color: selectedColor, width: 2)),
             ),
             child: IconButton(
                 onPressed: onPressed,
@@ -381,6 +507,62 @@ class ToolRadioButton extends StatelessWidget {
             height: 30,
           ));
     }
+  }
+}
+
+class OptionCheckButton extends StatelessWidget {
+  final PaintOption buttonOption;
+
+  final bool selected;
+  final Color selectedColor;
+
+  final ValueChanged<bool> onOptionChanged;
+
+  OptionCheckButton(
+      {required this.buttonOption,
+      required this.selected,
+      required this.onOptionChanged,
+      required Color selectedColor})
+      : this.selectedColor = selectedColor.withAlpha(255);
+
+  @override
+  Widget build(BuildContext context) {
+    VoidCallback onPressed = () {
+      onOptionChanged(!selected);
+    };
+
+    return IconButton(
+        onPressed: onPressed,
+        icon: SvgPicture.asset(
+          selected ? buttonOption.imageOnPath : buttonOption.imageOffPath,
+          color: selected ? selectedColor : null,
+          height: 30,
+        ));
+  }
+}
+
+class ActionButton extends StatelessWidget {
+  final PaintAction paintAction;
+
+  final bool enabled;
+
+  final VoidCallback onPressed;
+
+  ActionButton({
+    required this.paintAction,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+        onPressed: enabled ? onPressed : null,
+        icon: SvgPicture.asset(
+          paintAction.imagePath,
+          color: enabled ? null : Colors.black.withAlpha(100),
+          height: 30,
+        ));
   }
 }
 
