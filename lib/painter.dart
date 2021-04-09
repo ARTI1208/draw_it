@@ -19,6 +19,8 @@ class PainterWidget extends StatefulWidget {
 
 enum PaintType { MOVE, PENCIL, ERASER, LINE, RECTANGLE, OVAL }
 
+enum ChangeType { PAINT, REMOVE }
+
 enum PaintOption { FILLED }
 
 enum PaintAction { UNDO, REDO, CLEAR, CLEAR_MODS }
@@ -127,6 +129,65 @@ extension PathOffsetExtension on Path {
   }
 }
 
+extension ExtendedList<E> on List<E> {
+
+  set safeLast(E newLast) {
+    if (isEmpty) {
+      add(newLast);
+    } else {
+      this[length - 1] = newLast;
+    }
+  }
+}
+
+mixin Alias {}
+
+class DrawItem {
+
+  final Path path;
+  final Paint paint;
+
+  DrawItem(this.path, this.paint);
+  
+}
+
+class HistoryItem {
+
+  final ChangeType changeType;
+  final List<DrawItem> drawItems;
+
+  HistoryItem(this.changeType, this.drawItems);
+
+  HistoryItem.single(this.changeType, DrawItem drawItem): this.drawItems = [drawItem];
+
+  // While we have only 2 types..
+  HistoryItem _flipType() {
+    switch (changeType) {
+      case ChangeType.PAINT:
+        return withItem1(ChangeType.REMOVE);
+      case ChangeType.REMOVE:
+        return withItem1(ChangeType.PAINT);
+    }
+  }
+
+  HistoryItem toRedo() {
+    return _flipType();
+  }
+
+  HistoryItem toUndo() {
+    return _flipType();
+  }
+
+
+  HistoryItem withItem1(ChangeType newType) {
+    return HistoryItem(newType, drawItems);
+  }
+
+  HistoryItem withItem2(List<DrawItem> newItems) {
+    return HistoryItem(changeType, newItems);
+  }
+}
+
 class PainterState extends State<PainterWidget> {
   Color color = Colors.black;
   HSVColor hsvColor = HSVColor.fromColor(Colors.black);
@@ -135,9 +196,10 @@ class PainterState extends State<PainterWidget> {
 
   bool filled = true;
 
-  List<Tuple2<Path, Paint>> toDraw = [];
+  List<DrawItem> toDraw = [];
 
-  List<Iterable<Tuple2<Path, Paint>>> removed = [];
+  List<HistoryItem> redo = [];
+  List<HistoryItem> undo = [];
 
   PaintType _paintType = PaintType.MOVE;
 
@@ -172,24 +234,17 @@ class PainterState extends State<PainterWidget> {
     // toDraw.add(Tuple2(path, linePaint));
   }
 
-  // void onStartErase(DragStartDetails details) {
-  //   setState(() {
-  //     Path path = Path()
-  //       ..moveTo(details.localPosition.dx, details.localPosition.dy);
-  //
-  //     Paint paint = linePaint..color = backgroundColor;
-  //
-  //     toDraw.add(Tuple2(path, paint));
-  //   });
-  // }
-  //
-  // void onErase(DragUpdateDetails details) {
-  //   setState(() {
-  //     Path linePath = toDraw.last.item1;
-  //
-  //     linePath.lineTo(details.localPosition.dx, details.localPosition.dy);
-  //   });
-  // }
+  void draw(DrawItem item, {bool removeLastUndo = false}) {
+    toDraw.add(item);
+
+    HistoryItem historyItem = HistoryItem.single(ChangeType.PAINT, item);
+
+    if (removeLastUndo) {
+      undo.safeLast = historyItem;
+    } else {
+      undo.add(historyItem);
+    }
+  }
 
   void onStartErase(MoveEvent details) {
     Paint paint = linePaint..color = backgroundColor;
@@ -199,12 +254,12 @@ class PainterState extends State<PainterWidget> {
     Path path = Path()..moveTo(actualPosition.dx, actualPosition.dy);
 
     setState(() {
-      toDraw.add(Tuple2(path, paint));
+      draw(DrawItem(path, paint));
     });
   }
 
   void onErase(MoveEvent details) {
-    Path linePath = toDraw.last.item1;
+    Path linePath = toDraw.last.path;
     Offset actualPosition = toActualPosition(details.localPos);
 
     setState(() {
@@ -242,40 +297,20 @@ class PainterState extends State<PainterWidget> {
     return pos.scale(1 / scale, 1 / scale);
   }
 
-  // void onStartPencilDraw(DragStartDetails details) {
-  //
-  //   Offset actualPosition = toActualPosition(details.localPosition);
-  //
-  //   Path path = Path()
-  //     ..moveTo(actualPosition.dx, actualPosition.dy);
-  //
-  //   setState(() {
-  //     toDraw.add(Tuple2(path, linePaint));
-  //   });
-  // }
-  //
-  // void onPencilDraw(DragUpdateDetails details) {
-  //   Path linePath = toDraw.last.item1;
-  //
-  //   Offset actualPosition = toActualPosition(details.localPosition);
-  //
-  //   setState(() {
-  //     linePath.lineTo(actualPosition.dx,actualPosition.dy);
-  //   });
-  // }
-
   void onStartPencilDraw(MoveEvent details) {
     Offset actualPosition = toActualPosition(details.localPos);
 
     Path path = Path()..moveTo(actualPosition.dx, actualPosition.dy);
 
+    var data = DrawItem(path, linePaint);
+
     setState(() {
-      toDraw.add(Tuple2(path, linePaint));
+      draw(data);
     });
   }
 
   void onPencilDraw(MoveEvent details) {
-    Path linePath = toDraw.last.item1;
+    Path linePath = toDraw.last.path;
 
     Offset actualPosition = toActualPosition(details.localPos);
 
@@ -285,7 +320,7 @@ class PainterState extends State<PainterWidget> {
   }
 
   void onPencilDrawSc(ScaleEvent details) {
-    Path linePath = toDraw.last.item1;
+    Path linePath = toDraw.last.path;
 
     // details.focalPoint;
 
@@ -296,57 +331,28 @@ class PainterState extends State<PainterWidget> {
     });
   }
 
-  // void onStartShapeDraw(DragStartDetails details) {
-  //   shapeStart = toActualPosition(details.localPosition);
-  //   Path path = Path();
-  //   toDraw.add(Tuple2(path, basePaint));
-  // }
-
   void onStartShapeDraw(MoveEvent details) {
     shapeStart = toActualPosition(details.localPos, false);
     Path path = Path();
-    toDraw.add(Tuple2(path, basePaint));
+    draw(DrawItem(path, basePaint));
   }
 
   void onStopDraw() {
     shapeStart = null;
 
-    Path path = toDraw.last.item1;
+    Path path = toDraw.last.path;
 
     if (path.computeMetrics().isEmpty) {
       toDraw.removeLast();
     }
   }
 
-  // void onStartLineDraw(DragStartDetails details) {
-  //   shapeStart = toActualPosition(details.localPosition);
-  //
-  //   Path path = Path();
-  //
-  //   toDraw.add(Tuple2(path, linePaint));
-  // }
-  //
-  // void onLineDraw(DragUpdateDetails details) {
-  //   assert(shapeStart != null);
-  //
-  //   Offset actualPosition = toActualPosition(details.localPosition);
-  //
-  //   Path linePath = toDraw.last.item1;
-  //   linePath.reset();
-  //   linePath.moveTo(shapeStart!.dx, shapeStart!.dy);
-  //
-  //   setState(() {
-  //
-  //     linePath.lineTo(actualPosition.dx, actualPosition.dy);
-  //   });
-  // }
-
   void onStartLineDraw(MoveEvent details) {
     shapeStart = toActualPosition(details.localPos);
 
     Path path = Path();
 
-    toDraw.add(Tuple2(path, linePaint));
+    draw(DrawItem(path, linePaint));
   }
 
   void onLineDraw(MoveEvent details) {
@@ -354,7 +360,7 @@ class PainterState extends State<PainterWidget> {
 
     Offset actualPosition = toActualPosition(details.localPos);
 
-    Path linePath = toDraw.last.item1;
+    Path linePath = toDraw.last.path;
     linePath.reset();
     linePath.moveTo(shapeStart!.dx, shapeStart!.dy);
 
@@ -363,106 +369,46 @@ class PainterState extends State<PainterWidget> {
     });
   }
 
-  // void onRectangleDraw(DragUpdateDetails details) {
-  //   assert(shapeStart != null);
-  //
-  //   Offset actualPosition = toActualPosition(details.localPosition);
-  //
-  //   Path linePath = toDraw.last.item1;
-  //   linePath.reset();
-  //
-  //   setState(() {
-  //     linePath.addRect(Rect.fromPoints(shapeStart!, actualPosition));
-  //   });
-  // }
-  //
-  // void onOvalDraw(DragUpdateDetails details) {
-  //   assert(shapeStart != null);
-  //
-  //   var center = shapeStart;
-  //   if (center == null) return;
-  //
-  //   Offset actualPosition = toActualPosition(details.localPosition);
-  //
-  //   var width = (actualPosition.dx - center.dx) * 2;
-  //   var height = (actualPosition.dy - center.dy) * 2;
-  //
-  //   Path linePath = toDraw.last.item1;
-  //   linePath.reset();
-  //
-  //   setState(() {
-  //     linePath.addOval(
-  //         Rect.fromCenter(center: center, width: width, height: height));
-  //   });
-  // }
-
   void onRectangleDraw(MoveEvent details) {
-    assert(shapeStart != null);
-
-    Offset actualPosition = toActualPosition(details.localPos, false);
-
-    Path linePath = toDraw.last.item1;
-    linePath.reset();
-
-    Matrix4 matrix4 = Matrix4Transform().rotate(-angle).matrix4;
-
-    // stdout.writeln("matr" + matrix4.storage.toString());
-
-    linePath.addRect(Rect.fromPoints(shapeStart!, actualPosition));
-
-    Path resultPath = linePath.transform(matrix4.storage);
-
-    Paint paint = toDraw.removeLast().item2;
-
-    setState(() {
-      toDraw.add(Tuple2(resultPath, paint));
+    updateShape(details, (path, startPosition, currentPosition) {
+      path.addRect(Rect.fromPoints(startPosition, currentPosition));
     });
   }
 
   void onOvalDraw(MoveEvent details) {
-    assert(shapeStart != null);
+    updateShape(details, (path, startPosition, currentPosition) {
 
-    var center = shapeStart;
-    if (center == null) return;
+      var width = (currentPosition.dx - startPosition.dx) * 2;
+      var height = (currentPosition.dy - startPosition.dy) * 2;
 
-    Offset actualPosition = toActualPosition(details.localPos, false);
-
-    var width = (actualPosition.dx - center.dx) * 2;
-    var height = (actualPosition.dy - center.dy) * 2;
-
-    Path linePath = toDraw.last.item1;
+      path.addOval(Rect.fromCenter(center: startPosition, width: width, height: height));
+    });
+  }
+  
+  void updateShape(MoveEvent details, void addShape(Path path, Offset startPosition, Offset currentPosition)) {
+    
+    Offset? shapeStartPoint = shapeStart;
+    if (shapeStartPoint == null) return;
+    
+    Path linePath = toDraw.last.path;
     linePath.reset();
 
-    Matrix4 matrix4 = Matrix4Transform()
-        .rotate(
-          -angle,
-        )
-        .matrix4;
+    Matrix4 matrix4 = Matrix4Transform().rotate(-angle).matrix4;
 
-    linePath
-        .addOval(Rect.fromCenter(center: center, width: width, height: height));
+    Offset actualPosition = toActualPosition(details.localPos, false);
+    
+    addShape(linePath, shapeStartPoint, actualPosition);
 
     Path resultPath = linePath.transform(matrix4.storage);
 
-    Paint paint = toDraw.removeLast().item2;
+    Paint paint = toDraw.removeLast().paint;
+
+    var data = DrawItem(resultPath, paint);
 
     setState(() {
-      toDraw.add(Tuple2(resultPath, paint));
+      draw(data, removeLastUndo: true);
     });
   }
-
-  // void onMove(DragUpdateDetails details) {
-  //   setState(() {
-  //     moveOffset += details.delta;
-  //   });
-  // }
-  //
-  // void onScale(ScaleUpdateDetails details) {
-  //   setState(() {
-  //     // scale *= details.scale;
-  //     angle = details.rotation;
-  //   });
-  // }
 
   void onMove(MoveEvent details) {
     // stdout.writeln("moveUpd");
@@ -590,26 +536,50 @@ class PainterState extends State<PainterWidget> {
           createDivider(isPortrait),
           ActionButton(
               paintAction: PaintAction.UNDO,
-              enabled: toDraw.isNotEmpty,
+              enabled: undo.isNotEmpty,
               // enabled: true,
               onPressed: () {
-                if (toDraw.isEmpty) return;
+                if (undo.isEmpty) return;
+
+                var lastItem = undo.removeLast();
+
+                HistoryItem redoItem = lastItem.toRedo();
 
                 setState(() {
-                  var lastPath = toDraw.removeLast();
-                  removed.add([lastPath]);
+                  redo.add(redoItem);
+
+                  switch (lastItem.changeType) {
+                    case ChangeType.PAINT:
+                      toDraw.removeRange(toDraw.length - lastItem.drawItems.length, toDraw.length);
+                      break;
+                    case ChangeType.REMOVE:
+                      toDraw.addAll(redoItem.drawItems);
+                      break;
+                  }
                 });
               }),
           ActionButton(
               paintAction: PaintAction.REDO,
-              enabled: removed.isNotEmpty,
+              enabled: redo.isNotEmpty,
               // enabled: true,
               onPressed: () {
-                if (removed.isEmpty) return;
+                if (redo.isEmpty) return;
+
+                var lastItem = redo.removeLast();
+
+                HistoryItem undoItem = lastItem.toUndo();
 
                 setState(() {
-                  var lastPath = removed.removeLast();
-                  toDraw.addAll(lastPath);
+                  undo.add(undoItem);
+
+                  switch (lastItem.changeType) {
+                    case ChangeType.PAINT:
+                      toDraw.removeRange(toDraw.length - lastItem.drawItems.length, toDraw.length);
+                      break;
+                    case ChangeType.REMOVE:
+                      toDraw.addAll(undoItem.drawItems);
+                      break;
+                  }
                 });
               }),
           ActionButton(
@@ -618,8 +588,11 @@ class PainterState extends State<PainterWidget> {
             // enabled: true,
             onPressed: () {
               setState(() {
-                removed.add(List.from(toDraw));
-                toDraw.clear();
+                undo.clear();
+                redo.clear();
+
+                undo.add(HistoryItem(ChangeType.REMOVE, toDraw));
+                toDraw = [];
               });
             },
           ),
@@ -694,65 +667,9 @@ class PainterState extends State<PainterWidget> {
               });
             }));
 
-    // Widget drawingWidget = GestureDetector(
-    //   // onPanStart: (details) {
-    //   //   removed.clear();
-    //   //
-    //   //   switch (_paintType) {
-    //   //     case PaintType.PENCIL:
-    //   //       onStartPencilDraw(details);
-    //   //       break;
-    //   //     case PaintType.ERASER:
-    //   //       onStartErase(details);
-    //   //       break;
-    //   //     case PaintType.LINE:
-    //   //       onStartLineDraw(details);
-    //   //       break;
-    //   //     case PaintType.RECTANGLE:
-    //   //       onStartShapeDraw(details);
-    //   //       break;
-    //   //     case PaintType.OVAL:
-    //   //       onStartShapeDraw(details);
-    //   //       break;
-    //   //   }
-    //   // },
-    //   // onPanCancel: () => onStopDraw(),
-    //   // onPanEnd: (_) => onStopDraw(),
-    //   // onPanUpdate: (details) {
-    //   //   switch (_paintType) {
-    //   //     case PaintType.PENCIL:
-    //   //       onPencilIconButtonDraw(details);
-    //   //       break;
-    //   //     case PaintType.ERASER:
-    //   //       onErase(details);
-    //   //       break;
-    //   //     case PaintType.LINE:
-    //   //       onLineDraw(details);
-    //   //       break;
-    //   //     case PaintType.RECTANGLE:
-    //   //       onRectangleDraw(details);
-    //   //       break;
-    //   //     case PaintType.OVAL:
-    //   //       onOvalDraw(details);
-    //   //       break;
-    //   //     case PaintType.MOVE:
-    //   //       onMove(details);
-    //   //       break;
-    //   //   }
-    //   // },
-    //   onScaleUpdate: (details) {
-    //     if (_paintType == PaintType.MOVE) {
-    //       onScale(details);
-    //     }
-    //   },
-    //   child: CustomPaint(
-    //     painter: DrawPainter(toDraw, moveOffset, scale, angle),
-    //   ),
-    // );
-
     Widget drawingWidget = XGestureDetector(
       onMoveStart: (details) {
-        removed.clear();
+        redo.clear();
 
         switch (_paintType) {
           case PaintType.PENCIL:
@@ -824,21 +741,6 @@ class PainterState extends State<PainterWidget> {
           child: DecoratedBox(
               decoration: BoxDecoration(color: backgroundColor),
               child: drawingWidget)),
-      // Slider(
-      //     value: strokeWidth,
-      //     min: 0.0,
-      //     max: 50.0,
-      //     onChanged: (newValue) {
-      //       setState(() {
-      //         strokeWidth = newValue;
-      //       });
-      //     }),
-      // SingleChildScrollView(
-      //     scrollDirection: Axis.horizontal,
-      //     child: ButtonBar(
-      //         mainAxisSize: MainAxisSize.max,
-      //         alignment: MainAxisAlignment.spaceEvenly,
-      //         children: buttons)),
       DecoratedBox(
           decoration:
               BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor),
@@ -980,15 +882,6 @@ class OptionCheckButton extends StatelessWidget {
       onOptionChanged(!selected);
     };
 
-    // return IconButton(
-    //     splashRadius: splashRadius,
-    //     onPressed: onPressed,
-    //     icon: SvgPicture.asset(
-    //       selected ? buttonOption.imageOnPath : buttonOption.imageOffPath,
-    //       color: selected ? selectedColor : null,
-    //       height: size,
-    //     ));
-
     return PaintButton.createInk(
         onPressed,
         SvgPicture.asset(
@@ -1019,14 +912,6 @@ class ActionButton extends PaintButton {
 
   @override
   Widget build(BuildContext context) {
-    // return IconButton(
-    //     splashRadius: splashRadius,
-    //     onPressed: enabled ? onPressed : null,
-    //     icon: SvgPicture.asset(
-    //       paintAction.imagePath,
-    //       color: enabled ? null : Colors.black.withAlpha(100),
-    //       height: size,
-    //     ));
 
     return PaintButton.createInk(
         enabled ? onPressed : null,
@@ -1067,7 +952,7 @@ abstract class PaintButton extends StatelessWidget {
 }
 
 class DrawPainter extends CustomPainter {
-  List<Tuple2<Path, Paint>> data;
+  List<DrawItem> data;
 
   Offset moveOffset;
   Offset fp;
@@ -1100,7 +985,7 @@ class DrawPainter extends CustomPainter {
           ..color = Colors.black
           ..style = PaintingStyle.stroke;
 
-        data.insert(0, Tuple2(path, paint));
+        data.insert(0, DrawItem(path, paint));
       }
     }
 
@@ -1112,8 +997,8 @@ class DrawPainter extends CustomPainter {
 
     // canvas.scale(scale);
 
-    for (Tuple2<Path, Paint> entry in data) {
-      canvas.drawPath(entry.item1, entry.item2);
+    for (DrawItem entry in data) {
+      canvas.drawPath(entry.path, entry.paint);
     }
   }
 
