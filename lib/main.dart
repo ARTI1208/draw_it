@@ -1,4 +1,4 @@
-import 'package:draw_it/painter.dart';
+import 'package:draw_it/painting/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
