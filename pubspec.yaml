@@ -32,6 +32,8 @@ dependencies:
   flutter_svg: ^0.21.0-nullsafety.0
   tuple: any
   flutter_colorpicker: 0.4.0
+  gesture_x_detector: ^1.0.0
+  matrix4_transform: ^2.0.0
 
 dev_dependencies:
   flutter_test:
