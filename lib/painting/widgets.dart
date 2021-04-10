@@ -1,19 +1,19 @@
-import 'dart:developer' as dev;
-import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:draw_it/extensions/collections.dart';
+import 'package:draw_it/extensions/platform.dart';
 import 'package:draw_it/painting/buttons.dart';
 import 'package:draw_it/painting/color_indicator.dart';
+import 'package:draw_it/painting/enums.dart';
+import 'package:draw_it/painting/models.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart' as fcp;
-import 'package:gesture_x_detector/gesture_x_detector.dart';
 import 'package:matrix4_transform/matrix4_transform.dart';
-
-import 'package:draw_it/painting/enums.dart';
-import 'package:draw_it/extensions/collections.dart';
-import 'package:draw_it/painting/models.dart';
+import 'package:matrix_gesture_detector/matrix_gesture_detector.dart';
 
 class PainterWidget extends StatefulWidget {
   PainterWidget({Key? key}) : super(key: key);
@@ -23,264 +23,138 @@ class PainterWidget extends StatefulWidget {
 }
 
 class PainterState extends State<PainterWidget> {
-  Color color = Colors.black;
+  static const double _minPaintThickness = 0;
+  static const double _maxPaintThickness = 50;
 
-  double strokeWidth = 5;
+  static const double _minScale = 0.05;
+  static const double _maxScale = 10;
 
-  bool filled = true;
+  static const double _minAngle = 0;
+  static const double _maxAngle = 2 * pi;
 
-  List<DrawItem> toDraw = [];
+  static const double _wheelScale = 0.05;
 
-  List<HistoryItem> redo = [];
-  List<HistoryItem> undo = [];
+  static const double _axisDividerSize = 30;
+  static const double _crossAxisDividerSize = 20;
+  static const double _dividerThickness = 1;
 
-  PaintTool _paintTool = PaintTool.MOVE;
+  static const double _buttonSize = 30;
 
-  DrawingContext drawingContext = DrawingContext(Colors.white);
+  PaintTool _paintTool = PaintTool.PENCIL;
+  Map<PaintOption, bool> _options = {};
 
-  Offset? shapeStart;
-
-  Offset moveStart = Offset.zero;
-  Offset moveOffset = Offset.zero;
-  double scale = 1;
-  double scaleStart = 1;
-  double angleStart = 0;
-  double angle = 3 * pi / 2;
-
-  Offset fp = Offset.zero;
-  Offset lastFp = Offset.zero;
-
-  static const double minScale = 0.05;
-  static const double maxScale = 10;
+  DrawingState _drawingState = DrawingState();
 
   GlobalKey _paintingAreaKey = GlobalKey();
+
+  List<Offset> _continuousPoints = [];
+
+  Paint get _currentPaint {
+    var paint = Paint()
+      ..color = _drawingState.color
+      ..strokeWidth = _drawingState.strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    paint = PaintOption.values.fold(paint, (currentPaint, option) {
+      return option.setupPaint(currentPaint, _drawingState, hasOption(option));
+    });
+
+    return _paintTool.setupPaint(paint, _drawingState);
+  }
 
   @override
   void initState() {
     super.initState();
-
-    // Path path = Path()
-    //   ..moveTo(10, 10)
-    //   ..lineTo(200, 200);
-    //
-    // toDraw.add(Tuple2(path, linePaint));
+    _options[PaintOption.FILLED] = true;
   }
 
-  void draw(DrawItem item, {bool removeLastUndo = false}) {
-    toDraw.add(item);
-
+  void draw(DrawItem item, {bool updateLast = false}) {
     HistoryItem historyItem = HistoryItem.single(ChangeType.PAINT, item);
 
-    if (removeLastUndo) {
-      undo.safeLast = historyItem;
+    if (updateLast) {
+      _drawingState.toDraw.safeLast = item;
+      _drawingState.undo.safeLast = historyItem;
     } else {
-      undo.add(historyItem);
+      _drawingState.toDraw.add(item);
+      _drawingState.undo.add(historyItem);
     }
   }
 
-  Paint get basePaint {
-    return Paint()
-      ..color = color
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = strokeWidth / scale
-      ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke;
+  void onStartContinuousDrawingOffset(Offset pointerPosition) {
+    _continuousPoints = [];
+    onStartShapeDrawOffset(pointerPosition);
   }
 
-  Offset toActualPosition(Offset position, { bool translate = true,
-    bool rotate = true, bool scaled = true, Offset? pivot
-  }) {
-    Offset pos = position;
+  void updateContinuousDrawingOffset(Offset pointerPosition) {
+    updateDrawing((path) {
+      path.moveTo(_drawingState.shapeStart.dx, _drawingState.shapeStart.dy);
 
-    if (translate) {
-      // Offset actualMoveOffset = toActualPosition(moveOffset, translate: false);
-      Offset actualMoveOffset = -moveOffset;
-
-      pos = pos.translate(actualMoveOffset.dx, actualMoveOffset.dy);
-    }
-
-    if (rotate) {
-      Offset actualPivot = pivot ?? moveStart;
-
-      double newX = actualPivot.dx +
-          (pos.dx - actualPivot.dx) * cos(angle) +
-          (pos.dy - actualPivot.dy) * sin(angle);
-
-      double newY = actualPivot.dy -
-          (pos.dx - actualPivot.dx) * sin(angle) +
-          (pos.dy - actualPivot.dy) * cos(angle);
-
-      pos = Offset(newX, newY);
-    }
-
-    if (scaled) {
-      pos = pos.scale(1 / scale, 1 / scale);
-    }
-
-    return pos;
-  }
-
-  List<Offset> continuousPoints = [];
-
-  void onStartContinuousDrawing(MoveEvent details) {
-    shapeStart = applyOffsetTransformations(details.localPos);
-    continuousPoints = [];
-    Offset actualPosition = details.localPos;
-
-    Path path = Path()..moveTo(actualPosition.dx, actualPosition.dy);
-
-    var data = DrawItem(path, _paintTool.setupPaint(basePaint, drawingContext));
-
-    setState(() {
-      draw(data);
+      _continuousPoints.add(applyOffsetTransformations(pointerPosition));
+      for (var point in _continuousPoints) {
+        path.lineTo(point.dx, point.dy);
+      }
     });
   }
 
-  void onStartShapeDraw(MoveEvent details) {
-    // shapeStart = toActualPosition(details.localPos, rotate: false, translate: false);
-    shapeStart = details.localPos;
+  void onStartShapeDrawOffset(Offset pointerPosition) {
+    _drawingState.shapeStart = applyOffsetTransformations(pointerPosition);
     Path path = Path();
-    draw(DrawItem(path, _paintTool.setupPaint(basePaint, drawingContext)));
+    setState(() {
+      draw(DrawItem(path, _currentPaint));
+    });
   }
 
-  void onStopDraw() {
-    // shapeStart = null;
-    //
-    // Path path = toDraw.last.path;
-    //
-    // if (path.computeMetrics().isEmpty) {
-    //   toDraw.removeLast();
-    // }
+  void updateShapeOffset(Offset pointerPosition) {
+    updateDrawing((path) {
+      Offset actualPosition = applyOffsetTransformations(pointerPosition);
+      _paintTool.drawPath(path, _drawingState.shapeStart, actualPosition);
+    });
+  }
+
+  void updateDrawing(void drawPath(Path path)) {
+    DrawItem lastItem = _drawingState.toDraw.last;
+
+    Path linePath = lastItem.path;
+    linePath.reset();
+
+    drawPath(linePath);
+
+    Path resultPath = applyPathTransformations(linePath);
+
+    Paint paint = lastItem.paint;
+
+    var data = DrawItem(resultPath, paint);
+
+    setState(() {
+      draw(data, updateLast: true);
+    });
   }
 
   Path applyPathTransformations(Path path) {
+    var decomposed =
+        MatrixGestureDetector.decomposeToValues(_drawingState.transform);
+
     Matrix4 matrix4 = Matrix4Transform()
-    // .translateOffset(-moveOffset)
-        .rotate(-angle)
-        .scale(1 / scale, origin: fp)
+        .rotate(-decomposed.rotation)
+        .scale(1 / decomposed.scale)
         .matrix4;
 
     return path.transform(matrix4.storage);
   }
 
   Offset applyOffsetTransformations(Offset offset) {
-    bool globalTranslate = true;
-    bool globalRotate = false;
-    bool globalScale = false;
+    var decomposed =
+        MatrixGestureDetector.decomposeToValues(_drawingState.transform);
 
-    return toActualPosition(offset, translate: globalTranslate, rotate: globalRotate, scaled: globalScale);
-  }
-
-  void updateContinuousDrawing(MoveEvent details) {
-    DrawItem lastItem = toDraw.last;
-
-    Offset actualStart = shapeStart!;
-    continuousPoints.add(applyOffsetTransformations(details.localPos));
-
-    Path linePath = lastItem.path;
-
-    linePath.reset();
-    linePath.moveTo(actualStart.dx, actualStart.dy);
-
-    for (var point in continuousPoints) {
-      linePath.lineTo(point.dx, point.dy);
-    }
-
-    // linePath.lineTo(actualPosition.dx, actualPosition.dy);
-    Path resultPath = applyPathTransformations(linePath);
-
-    var data = DrawItem(resultPath, lastItem.paint);
-
-    setState(() {
-      toDraw.last = data;
-    });
-  }
-
-  void updateShape(MoveEvent details) {
-    
-    Offset? shapeStartPoint = shapeStart;
-    if (shapeStartPoint == null) return;
-    
-    Path linePath = toDraw.last.path;
-    linePath.reset();
-
-    Offset actualPosition = applyOffsetTransformations(details.localPos);
-    Offset actualStart = applyOffsetTransformations(shapeStartPoint);
-
-
-    debugPrint("Orig: " + shapeStartPoint.toString() + "|||" + details.localPos.toString());
-    debugPrint("Act: " + actualStart.toString() + "|||" + actualPosition.toString());
-
-    _paintTool.drawPath(linePath, actualStart, actualPosition);
-
-    Path resultPath = applyPathTransformations(linePath);
-    // resultPath = linePath;
-
-    Paint paint = toDraw.removeLast().paint;
-
-    var data = DrawItem(resultPath, paint);
-
-    setState(() {
-      draw(data, removeLastUndo: true);
-    });
-  }
-
-  void onMoveStart(MoveEvent details) {
-    moveStart = toActualPosition(details.localPos, translate: false, rotate: false);
-    // moveOffset = toActualPosition(moveOffset, translate: false, rotate: true);
-  }
-
-  void onMove(MoveEvent details) {
-    // stdout.writeln("moveUpd");
-
-    Offset delta = details.localDelta;
-
-    // debugPrint(DateTime.now().toString() + ": " + delta.toString());
-
-    setState(() {
-      moveOffset += delta;
-      // lastFp = toActualPosition(details.localPos);
-    });
-  }
-
-  void onScaleStart(Offset focalPoint) {
-    // stdout.writeln("scaleStart");
-    moveStart = focalPoint;
-    fp = focalPoint;
-    lastFp = focalPoint;
-  }
-
-  void onScaleEnd() {
-    // stdout.writeln("scaleEnd");
-    scaleStart = scale;
-    angleStart = angle;
-  }
-
-  void onScale(ScaleEvent details) {
-    // stdout.writeln("scaleUpd");
-    //
-    // stdout.writeln("fp: ${details.focalPoint.dx}; ${details.focalPoint.dy}");
-
-    double newScale = scaleStart + details.scale - 1;
-
-    if (newScale < minScale) {
-      newScale = minScale;
-    }
-
-    setState(() {
-      // fp = details.focalPoint;
-      scale = newScale;
-      angle = angleStart - details.rotationAngle;
-
-      moveOffset = toActualPosition(moveOffset, translate: false);
-      // lastFp += details.focalPoint;
-    });
+    Offset actualMoveOffset = -decomposed.translation;
+    return offset.translate(actualMoveOffset.dx, actualMoveOffset.dy);
   }
 
   Future<Color> _showColorPickerDialog() async {
-    Color newColor = color;
+    Color newColor = _drawingState.color;
 
     Widget colorPicker = fcp.ColorPicker(
-        pickerColor: color,
+        pickerColor: newColor,
         onColorChanged: (color) {
           newColor = color;
         });
@@ -298,30 +172,35 @@ class PainterState extends State<PainterWidget> {
         }).then((value) => value ?? newColor);
   }
 
-  Widget createDivider(bool vertical) {
+  Widget _createDivider(bool vertical) {
     if (vertical) {
       return Container(
-        height: 30,
-        width: 30,
+        height: _axisDividerSize,
+        width: _crossAxisDividerSize,
         child: VerticalDivider(
-          thickness: 1,
+          thickness: _dividerThickness,
           color: Colors.black87,
         ),
       );
     } else {
       return Container(
-        height: 30,
-        width: 30,
+        height: _crossAxisDividerSize,
+        width: _axisDividerSize,
         child: Divider(
-          thickness: 1,
+          thickness: _dividerThickness,
           color: Colors.black87,
         ),
       );
     }
   }
 
-  bool isThicknessAvailable() {
-    return _paintTool.hasThickness && !(_paintTool.fillable && filled);
+  bool hasOption(PaintOption option) {
+    return _options[option] == true;
+  }
+
+  bool get _isThicknessAvailable {
+    return _paintTool.hasThickness &&
+        !(_paintTool.fillable && hasOption(PaintOption.FILLED));
   }
 
   @override
@@ -335,115 +214,52 @@ class PainterState extends State<PainterWidget> {
 
     List<Widget> buttons = <Widget>[
           GestureDetector(
-            onTap: () async {
-              Color newColor = await _showColorPickerDialog();
-
-              // stdout.writeln("PaintColor: picker closed");
-
-              if (newColor == color) return;
-
-              setState(() {
-                // stdout.writeln("PaintColor: apply new color");
-                color = newColor;
-              });
-            },
-            child: Padding(
-              padding: isPortrait ? EdgeInsets.only(left: 10) : EdgeInsets.only(top: 10),
-              child: RepaintColorIndicator(
-                color,
-                height: 30,
-                width: 30,
-              ),
-            )
-    ),
-          createDivider(isPortrait),
-          ActionButton(
-              paintAction: PaintAction.UNDO,
-              enabled: undo.isNotEmpty,
-              // enabled: true,
-              onPressed: () {
-                if (undo.isEmpty) return;
-
-                var lastItem = undo.removeLast();
-
-                HistoryItem redoItem = lastItem.toRedo();
+              onTap: () async {
+                Color newColor = await _showColorPickerDialog();
+                if (newColor == _drawingState.color) return;
 
                 setState(() {
-                  redo.add(redoItem);
-
-                  switch (lastItem.changeType) {
-                    case ChangeType.PAINT:
-                      toDraw.removeRange(toDraw.length - lastItem.drawItems.length, toDraw.length);
-                      break;
-                    case ChangeType.REMOVE:
-                      toDraw.addAll(redoItem.drawItems);
-                      break;
-                  }
+                  _drawingState.color = newColor;
                 });
-              }),
-          ActionButton(
-              paintAction: PaintAction.REDO,
-              enabled: redo.isNotEmpty,
-              // enabled: true,
-              onPressed: () {
-                if (redo.isEmpty) return;
-
-                var lastItem = redo.removeLast();
-
-                HistoryItem undoItem = lastItem.toUndo();
-
-                setState(() {
-                  undo.add(undoItem);
-
-                  switch (lastItem.changeType) {
-                    case ChangeType.PAINT:
-                      toDraw.removeRange(toDraw.length - lastItem.drawItems.length, toDraw.length);
-                      break;
-                    case ChangeType.REMOVE:
-                      toDraw.addAll(undoItem.drawItems);
-                      break;
-                  }
-                });
-              }),
-          ActionButton(
-            paintAction: PaintAction.CLEAR,
-            enabled: toDraw.isNotEmpty,
-            // enabled: true,
-            onPressed: () {
-              setState(() {
-                undo.clear();
-                redo.clear();
-
-                undo.add(HistoryItem(ChangeType.REMOVE, toDraw));
-                toDraw = [];
-              });
-            },
-          ),
-          ActionButton(
-            paintAction: PaintAction.CLEAR,
-            onPressed: () {
-              setState(() {
-                moveOffset = Offset.zero;
-                moveStart = Offset.zero;
-                scale = 1;
-                scaleStart = 1;
-                angle = 0;
-                angleStart = 0;
-              });
-            },
-          ),
-          createDivider(isPortrait),
-          OptionCheckButton(
-              buttonOption: PaintOption.FILLED,
-              selected: filled,
-              selectedColor: color,
+              },
+              child: Padding(
+                padding: isPortrait
+                    ? EdgeInsets.only(left: 10)
+                    : EdgeInsets.only(top: 10),
+                child: RepaintColorIndicator(
+                  _drawingState.color,
+                  height: _buttonSize,
+                  width: _buttonSize,
+                ),
+              )),
+          _createDivider(isPortrait)
+        ] +
+        List.generate(PaintAction.values.length, (index) {
+          PaintAction paintAction = PaintAction.values[index];
+          return ActionButton(
+            paintAction: paintAction,
+            enabled: paintAction.isEnabled(_drawingState),
+            size: _buttonSize,
+            onPressed: () => setState(() {
+              paintAction.onPressed(_drawingState);
+            }),
+          );
+        }) +
+        [_createDivider(isPortrait)] +
+        List.generate(PaintOption.values.length, (index) {
+          PaintOption paintOption = PaintOption.values[index];
+          return OptionCheckButton(
+              buttonOption: paintOption,
+              selected: hasOption(paintOption),
+              selectedColor: _drawingState.color,
+              size: _buttonSize,
               onOptionChanged: (newValue) {
                 setState(() {
-                  filled = newValue;
+                  _options[paintOption] = newValue;
                 });
-              }),
-          createDivider(isPortrait),
-        ] +
+              });
+        }) +
+        [_createDivider(isPortrait)] +
         List.generate(
           PaintTool.values.length,
           (index) {
@@ -459,8 +275,9 @@ class PainterState extends State<PainterWidget> {
                 child: ToolRadioButton(
                   buttonType: type,
                   selectedType: _paintTool,
-                  selectedColor: color,
+                  selectedColor: _drawingState.color,
                   lineSide: lineSide,
+                  size: _buttonSize,
                   onTypeSelected: (newType) {
                     setState(() {
                       _paintTool = newType;
@@ -470,109 +287,155 @@ class PainterState extends State<PainterWidget> {
           },
         );
 
+    var decomposed =
+        MatrixGestureDetector.decomposeToValues(_drawingState.transform);
+    double angleZero2Pi = decomposed.rotation >= 0
+        ? decomposed.rotation
+        : decomposed.rotation + _maxAngle;
+
     Widget scaleSlider = RotatedBox(
         quarterTurns: isPortrait ? 0 : -1,
         child: Slider(
-            value: scale,
-            min: 0.1,
-            max: 10.0,
+            value: decomposed.scale,
+            min: min(_minScale, decomposed.scale),
+            max: max(_maxScale, decomposed.scale),
             onChanged: (newValue) {
+              // TODO : make scale origin equal to canvas center
+
+              Matrix4 scaled = Matrix4Transform()
+                  .translateOffset(decomposed.translation)
+                  .rotate(angleZero2Pi)
+                  .scale(newValue)
+                  .matrix4;
+
               setState(() {
-                scale = newValue;
-                // moveOffset = toActualPosition(moveOffset, translate: false);
+                _drawingState.transform = scaled;
               });
             }));
 
     Widget rotateSlider = RotatedBox(
         quarterTurns: isPortrait ? 0 : -1,
         child: Slider(
-            value: angle,
-            min: 0,
-            max: 2 * pi,
+            value: angleZero2Pi,
+            min: _minAngle,
+            max: _maxAngle,
             onChanged: (newValue) {
+              // TODO : make rotate origin equal to canvas center
+
+              Matrix4 rotated = Matrix4Transform()
+                  .translateOffset(decomposed.translation)
+                  .rotate(newValue)
+                  .scale(decomposed.scale)
+                  .matrix4;
+
               setState(() {
-                angle = newValue;
-                // moveOffset = toActualPosition(moveOffset, translate: false);
+                _drawingState.transform = rotated;
               });
             }));
 
     Widget thicknessSlider = RotatedBox(
         quarterTurns: isPortrait ? 0 : -1,
         child: Slider(
-            value: strokeWidth,
-            min: 0.0,
-            max: 50.0,
+            value: _drawingState.strokeWidth,
+            min: _minPaintThickness,
+            max: _maxPaintThickness,
             onChanged: (newValue) {
               setState(() {
-                strokeWidth = newValue;
+                _drawingState.strokeWidth = newValue;
               });
             }));
 
-    Widget drawingWidget = XGestureDetector(
-      onMoveStart: (details) {
-
-        switch (_paintTool) {
-          case PaintTool.PENCIL:
-          case PaintTool.ERASER:
-            onStartContinuousDrawing(details);
-            break;
-          case PaintTool.LINE:
-          case PaintTool.RECTANGLE:
-          case PaintTool.OVAL:
-            onStartShapeDraw(details);
-            break;
-          case PaintTool.MOVE:
-            onMoveStart(details);
-            return;
-        }
-
-        redo.clear();
-      },
-      onMoveEnd: (_) => onStopDraw(),
-      onMoveUpdate: (details) {
-        switch (_paintTool) {
-          case PaintTool.PENCIL:
-          case PaintTool.ERASER:
-            updateContinuousDrawing(details);
-            break;
-          case PaintTool.LINE:
-          case PaintTool.RECTANGLE:
-          case PaintTool.OVAL:
-            updateShape(details);
-            break;
-          case PaintTool.MOVE:
-            onMove(details);
-            break;
-        }
-      },
-      onScaleStart: (focalPoint) {
-        if (_paintTool == PaintTool.MOVE) {
-          onScaleStart(focalPoint);
-        }
-      },
-      onScaleEnd: () {
-        if (_paintTool == PaintTool.MOVE) {
-          onScaleEnd();
-        }
-      },
-      onScaleUpdate: (details) {
-        if (_paintTool == PaintTool.MOVE) {
-          onScale(details);
-        }
-      },
-      child: CustomPaint(
-        key: _paintingAreaKey,
-        painter: DrawPainter(
-            toDraw, moveOffset, scale, angle, _paintingAreaKey, lastFp),
-      ),
+    Widget painter = CustomPaint(
+      key: _paintingAreaKey,
+      painter: DrawPainter(_drawingState.toDraw, _drawingState.transform),
     );
 
-    EdgeInsets buttonInsets = EdgeInsets.symmetric(horizontal: 5, vertical: 5);
+    Widget drawingWidget;
+
+    if (_paintTool == PaintTool.MOVE) {
+      drawingWidget = MatrixGestureDetector(
+        onMatrixUpdate: (_, mt, ms, mr) {
+          setState(() {
+            _drawingState.transform = MatrixGestureDetector.compose(
+                _drawingState.transform, mt, ms, mr);
+          });
+        },
+        child: painter,
+      );
+    } else {
+      drawingWidget = GestureDetector(
+        onPanStart: (details) {
+          switch (_paintTool) {
+            case PaintTool.PENCIL:
+            case PaintTool.ERASER:
+              onStartContinuousDrawingOffset(details.localPosition);
+              break;
+            case PaintTool.LINE:
+            case PaintTool.RECTANGLE:
+            case PaintTool.OVAL:
+              onStartShapeDrawOffset(details.localPosition);
+              break;
+            case PaintTool.MOVE:
+              break;
+          }
+
+          _drawingState.redo.clear();
+        },
+        onPanUpdate: (details) {
+          switch (_paintTool) {
+            case PaintTool.PENCIL:
+            case PaintTool.ERASER:
+              updateContinuousDrawingOffset(details.localPosition);
+              break;
+            case PaintTool.LINE:
+            case PaintTool.RECTANGLE:
+            case PaintTool.OVAL:
+              updateShapeOffset(details.localPosition);
+              break;
+            case PaintTool.MOVE:
+              break;
+          }
+        },
+        child: CustomPaint(
+          painter: DrawPainter(_drawingState.toDraw, _drawingState.transform),
+        ),
+      );
+    }
+
+    drawingWidget = Listener(
+      onPointerSignal: (pointerSignal) {
+        // mouse wheel scroll
+        if (pointerSignal is PointerScrollEvent) {
+          // TODO : make scale origin equal pointer position
+
+          var scale = decomposed.scale +
+              (pointerSignal.scrollDelta.dy < 0 ? _wheelScale : -_wheelScale);
+          if (scale < _minScale) {
+            scale = _minScale;
+          } else if (scale > _maxScale) {
+            scale = _maxScale;
+          }
+
+          Matrix4 scaled = Matrix4Transform()
+              .translateOffset(decomposed.translation)
+              .rotate(angleZero2Pi)
+              .scale(scale)
+              .matrix4;
+
+          setState(() {
+            _drawingState.transform = scaled;
+          });
+        }
+      },
+      child: drawingWidget,
+    );
+
+    EdgeInsets buttonInsets = EdgeInsets.all(5);
 
     List<Widget> rootChildren = <Widget>[
       Expanded(
           child: DecoratedBox(
-              decoration: BoxDecoration(color: drawingContext.backgroundColor),
+              decoration: BoxDecoration(color: _drawingState.backgroundColor),
               child: drawingWidget)),
       DecoratedBox(
           decoration:
@@ -580,9 +443,9 @@ class PainterState extends State<PainterWidget> {
           child: Flex(
             direction: direction,
             children: [
-              scaleSlider,
-              rotateSlider,
-              if (isThicknessAvailable()) thicknessSlider,
+              if (DesktopPlatform.isDesktop) scaleSlider,
+              if (DesktopPlatform.isDesktop) rotateSlider,
+              if (_isThicknessAvailable) thicknessSlider,
               SingleChildScrollView(
                 scrollDirection: crossDirection,
                 padding: buttonInsets,
@@ -603,80 +466,20 @@ class PainterState extends State<PainterWidget> {
 }
 
 class DrawPainter extends CustomPainter {
-  List<DrawItem> data;
+  final List<DrawItem> _data;
+  final Matrix4 _transform;
 
-  Offset moveOffset;
-  Offset fp;
-  GlobalKey widgetKey;
-  double scale;
-  double angle;
-
-  static bool added = false;
-
-  DrawPainter(this.data, this.moveOffset, this.scale, this.angle,
-      this.widgetKey, this.fp);
+  DrawPainter(this._data, this._transform);
 
   @override
   void paint(Canvas canvas, Size size) {
-    // canvas.translate(moveOffset.dx, moveOffset.dy);
-    // canvas.translate(fp.dx, fp.dy);
+    canvas.transform(Float64List.fromList(_transform.storage));
 
-    Offset pivot = Offset.zero;
-
-    if (!added) {
-      added = true;
-      Size? s = widgetKey.currentContext?.size;
-      if (s != null) {
-        pivot = Offset(s.width / 2, s.height / 2);
-
-        Path path = Path()
-          ..addRect(Rect.fromLTWH(10, 10, s.width - 35, s.height - 35))
-        ;
-
-        Paint paint = Paint()
-          ..strokeWidth = 5
-          ..color = Colors.black
-          ..style = PaintingStyle.stroke;
-
-        data.insert(0, DrawItem(path, paint));
-      }
-    }
-
-    pivot = fp;
-
-    // debugPrint("Pivot: " + pivot.toString());
-    //
-    // Size? s = widgetKey.currentContext?.size;
-    // if (s != null) {
-    //   debugPrint("Size: " + s.toString());
-    // }
-
-    // canvas.translate(-pivot.dx, -pivot.dy);
-    // canvas.rotate(angle);
-    // canvas.translate(pivot.dx, pivot.dy);
-
-    Matrix4 matrix4 = Matrix4Transform()
-        .translateOffset(moveOffset)
-        .rotate(angle, origin: pivot)
-        .scale(scale, origin: pivot)
-        .matrix4;
-
-    canvas.transform(matrix4.storage);
-
-    // canvas.translate(fp.dx, fp.dy);
-
-    // canvas.translate(fp.dx / scale, fp.dy / scale);
-    //
-    // canvas.scale(scale);
-
-    for (DrawItem entry in data) {
+    for (DrawItem entry in _data) {
       canvas.drawPath(entry.path, entry.paint);
     }
-
-    // canvas.translate(-fp.dx, -fp.dy);
   }
 
   @override
   bool shouldRepaint(covariant DrawPainter oldDelegate) => true;
 }
-

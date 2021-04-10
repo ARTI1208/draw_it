@@ -17,20 +17,20 @@ class ToolRadioButton extends StatelessWidget {
   final double size;
   final double splashRadius;
   final double selectedItemInset;
-  final double borderWidth;
+  final double borderRadius;
 
   final ValueChanged<PaintTool> onTypeSelected;
 
   ToolRadioButton(
       {required this.buttonType,
-        required this.selectedType,
-        required this.onTypeSelected,
-        required Color selectedColor,
-        required this.lineSide,
-        this.size = 30,
-        this.splashRadius = 25,
-        this.selectedItemInset = 20,
-        this.borderWidth = 2})
+      required this.selectedType,
+      required this.onTypeSelected,
+      required Color selectedColor,
+      required this.lineSide,
+      this.size = 30,
+      this.splashRadius = 25,
+      this.selectedItemInset = 20,
+      this.borderRadius = 15})
       : this.selectedColor = selectedColor.withAlpha(255);
 
   @override
@@ -41,7 +41,6 @@ class ToolRadioButton extends StatelessWidget {
       }
     };
 
-    // Color? buttonColor = buttonType == selectedType ? selectedColor : null;
     Color? buttonColor = buttonType == selectedType ? Colors.white : null;
 
     Widget button = PaintButton.createInk(
@@ -51,13 +50,13 @@ class ToolRadioButton extends StatelessWidget {
           height: size,
           color: buttonColor,
         ),
+        borderRadius: borderRadius,
         selectedColor: selectedColor);
 
     if (buttonType == selectedType) {
-
       Decoration decoration = BoxDecoration(
         color: PaintButton.nonWhiteColor(selectedColor),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(borderRadius),
       );
 
       return DecoratedBox(
@@ -83,11 +82,11 @@ class OptionCheckButton extends StatelessWidget {
 
   OptionCheckButton(
       {required this.buttonOption,
-        required this.selected,
-        required this.onOptionChanged,
-        required Color selectedColor,
-        this.size = 30,
-        this.splashRadius = 25})
+      required this.selected,
+      required this.onOptionChanged,
+      required Color selectedColor,
+      this.size = 30,
+      this.splashRadius = 25})
       : this.selectedColor = selectedColor.withAlpha(255);
 
   @override
@@ -119,14 +118,13 @@ class ActionButton extends PaintButton {
 
   ActionButton(
       {required this.paintAction,
-        required this.onPressed,
-        this.enabled = true,
-        this.size = 30,
-        this.splashRadius = 25});
+      required this.onPressed,
+      this.enabled = true,
+      this.size = 30,
+      this.splashRadius = 25});
 
   @override
   Widget build(BuildContext context) {
-
     return PaintButton.createInk(
         enabled ? onPressed : null,
         SvgPicture.asset(
@@ -141,16 +139,18 @@ abstract class PaintButton extends StatelessWidget {
   static final double maximumLightness = 0.8;
 
   static InkWell createInk(VoidCallback? onPressed, Widget child,
-      {Color? selectedColor}) {
+      {Color? selectedColor,
+      double borderRadius = 10,
+      double insets = 8,
+      int highlightAlpha = 40,
+      int splashAlpha = 40}) {
     return InkWell(
-      // splashRadius: splashRadius,
-      // onPressed: onPressed,
-      highlightColor: selectedColor?.withAlpha(40),
-      splashColor: selectedColor?.withAlpha(40),
-      borderRadius: BorderRadius.circular(10),
+      highlightColor: selectedColor?.withAlpha(highlightAlpha),
+      splashColor: selectedColor?.withAlpha(splashAlpha),
+      borderRadius: BorderRadius.circular(borderRadius),
       onTap: onPressed,
       child: Padding(
-        padding: EdgeInsets.all(8),
+        padding: EdgeInsets.all(insets),
         child: child,
       ),
     );
@@ -159,8 +159,8 @@ abstract class PaintButton extends StatelessWidget {
   static Color nonWhiteColor(Color originalColor) {
     HSLColor backgroundColor = HSLColor.fromColor(originalColor);
     return (backgroundColor.lightness > maximumLightness
-        ? backgroundColor.withLightness(maximumLightness)
-        : backgroundColor)
+            ? backgroundColor.withLightness(maximumLightness)
+            : backgroundColor)
         .toColor();
   }
 }

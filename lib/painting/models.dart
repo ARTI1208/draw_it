@@ -1,24 +1,24 @@
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
+
 import 'enums.dart';
 
 class DrawItem {
-
   final Path path;
   final Paint paint;
 
   DrawItem(this.path, this.paint);
-
 }
 
 class HistoryItem {
-
   final ChangeType changeType;
   final List<DrawItem> drawItems;
 
   HistoryItem(this.changeType, this.drawItems);
 
-  HistoryItem.single(this.changeType, DrawItem drawItem): this.drawItems = [drawItem];
+  HistoryItem.single(this.changeType, DrawItem drawItem)
+      : this.drawItems = [drawItem];
 
   // While we have only 2 types..
   HistoryItem _flipType() {
@@ -38,7 +38,6 @@ class HistoryItem {
     return _flipType();
   }
 
-
   HistoryItem withItem1(ChangeType newType) {
     return HistoryItem(newType, drawItems);
   }
@@ -48,9 +47,19 @@ class HistoryItem {
   }
 }
 
-class DrawingContext {
+class DrawingState {
+  Color color = Colors.black;
 
-  Color backgroundColor;
+  double strokeWidth = 5;
 
-  DrawingContext(this.backgroundColor);
+  List<DrawItem> toDraw = [];
+
+  List<HistoryItem> undo = [];
+  List<HistoryItem> redo = [];
+
+  Color backgroundColor = Colors.white;
+
+  Offset shapeStart = Offset.zero;
+
+  Matrix4 transform = Matrix4.identity();
 }
