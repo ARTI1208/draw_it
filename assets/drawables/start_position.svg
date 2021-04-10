@@ -1,26 +1,7 @@
 <svg width="421.285" height="421.285" xmlns="http://www.w3.org/2000/svg">
 
  <g>
-  <title>background</title>
-  <rect fill="none" id="canvas_background" height="402" width="582" y="-1" x="-1"/>
- </g>
- <g>
   <title>Layer 1</title>
-  <g id="svg_4"/>
-  <g id="svg_5"/>
-  <g id="svg_6"/>
-  <g id="svg_7"/>
-  <g id="svg_8"/>
-  <g id="svg_9"/>
-  <g id="svg_10"/>
-  <g id="svg_11"/>
-  <g id="svg_12"/>
-  <g id="svg_13"/>
-  <g id="svg_14"/>
-  <g id="svg_15"/>
-  <g id="svg_16"/>
-  <g id="svg_17"/>
-  <g id="svg_18"/>
-  <text transform="matrix(1.0123, 0, 0, 1, -0.087842, 0)" xml:space="preserve" font-family="Helvetica, Arial, sans-serif" font-size="200" id="svg_19" y="280.142517" x="2.203262" stroke-width="0" stroke="#000" fill="#000000">(0;0)</text>
+  <text font-family="Arial, sans-serif" font-size="200" id="svg_19" x="207" y="266" dominant-baseline="middle" text-anchor="middle" stroke-width="0" stroke="#000" fill="#000000">(0;0)</text>
  </g>
 </svg>

@@ -1,4 +1,4 @@
-# draw_it
+# DrawIt!
 
 A new Flutter project.
 
