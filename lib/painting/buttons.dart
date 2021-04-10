@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:draw_it/painting/enums.dart';
+import 'package:draw_it/painting/models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -55,7 +56,7 @@ class ToolRadioButton extends StatelessWidget {
 
     if (buttonType == selectedType) {
       Decoration decoration = BoxDecoration(
-        color: PaintButton.nonWhiteColor(selectedColor),
+        color: ColorTools.nonWhiteColor(selectedColor),
         borderRadius: BorderRadius.circular(borderRadius),
       );
 
@@ -99,7 +100,7 @@ class OptionCheckButton extends StatelessWidget {
         onPressed,
         SvgPicture.asset(
           selected ? buttonOption.imageOnPath : buttonOption.imageOffPath,
-          color: selected ? PaintButton.nonWhiteColor(selectedColor) : null,
+          color: selected ? ColorTools.nonWhiteColor(selectedColor) : null,
           height: size,
         ),
         selectedColor: selectedColor);
@@ -136,8 +137,6 @@ class ActionButton extends PaintButton {
 }
 
 abstract class PaintButton extends StatelessWidget {
-  static final double maximumLightness = 0.8;
-
   static InkWell createInk(VoidCallback? onPressed, Widget child,
       {Color? selectedColor,
       double borderRadius = 10,
@@ -154,13 +153,5 @@ abstract class PaintButton extends StatelessWidget {
         child: child,
       ),
     );
-  }
-
-  static Color nonWhiteColor(Color originalColor) {
-    HSLColor backgroundColor = HSLColor.fromColor(originalColor);
-    return (backgroundColor.lightness > maximumLightness
-            ? backgroundColor.withLightness(maximumLightness)
-            : backgroundColor)
-        .toColor();
   }
 }

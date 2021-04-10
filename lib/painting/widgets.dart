@@ -293,9 +293,15 @@ class PainterState extends State<PainterWidget> {
         ? decomposed.rotation
         : decomposed.rotation + _maxAngle;
 
+    Color nonWhiteColor = _drawingState.nonWhiteColor;
+    Color sliderActiveColor = nonWhiteColor.withAlpha(255);
+    Color sliderInactiveColor = nonWhiteColor.withAlpha(80);
+
     Widget scaleSlider = RotatedBox(
         quarterTurns: isPortrait ? 0 : -1,
         child: Slider(
+            activeColor: sliderActiveColor,
+            inactiveColor: sliderInactiveColor,
             value: decomposed.scale,
             min: min(_minScale, decomposed.scale),
             max: max(_maxScale, decomposed.scale),
@@ -316,6 +322,8 @@ class PainterState extends State<PainterWidget> {
     Widget rotateSlider = RotatedBox(
         quarterTurns: isPortrait ? 0 : -1,
         child: Slider(
+            activeColor: sliderActiveColor,
+            inactiveColor: sliderInactiveColor,
             value: angleZero2Pi,
             min: _minAngle,
             max: _maxAngle,
@@ -336,6 +344,8 @@ class PainterState extends State<PainterWidget> {
     Widget thicknessSlider = RotatedBox(
         quarterTurns: isPortrait ? 0 : -1,
         child: Slider(
+            activeColor: sliderActiveColor,
+            inactiveColor: sliderInactiveColor,
             value: _drawingState.strokeWidth,
             min: _minPaintThickness,
             max: _maxPaintThickness,

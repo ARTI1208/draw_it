@@ -62,4 +62,18 @@ class DrawingState {
   Offset shapeStart = Offset.zero;
 
   Matrix4 transform = Matrix4.identity();
+
+  Color get nonWhiteColor => ColorTools.nonWhiteColor(color);
+}
+
+abstract class ColorTools {
+  static final double maximumLightness = 0.8;
+
+  static Color nonWhiteColor(Color originalColor) {
+    HSLColor backgroundColor = HSLColor.fromColor(originalColor);
+    return (backgroundColor.lightness > maximumLightness
+            ? backgroundColor.withLightness(maximumLightness)
+            : backgroundColor)
+        .toColor();
+  }
 }
