@@ -139,7 +139,7 @@ class ActionButton extends PaintButton {
 abstract class PaintButton extends StatelessWidget {
   static InkWell createInk(VoidCallback? onPressed, Widget child,
       {Color? selectedColor,
-      double borderRadius = 10,
+      double borderRadius = 20,
       double insets = 8,
       int highlightAlpha = 40,
       int splashAlpha = 40}) {
