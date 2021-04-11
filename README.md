@@ -1,6 +1,6 @@
 # Draw It!
 
-Simple drawing app.
+Simple drawing app written in Flutter. Should work on all platforms, but tested only Android/IOS/Web
  
 ## Available actions and options:
 * Color selection
