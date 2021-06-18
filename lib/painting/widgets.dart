@@ -475,6 +475,7 @@ class PainterState extends State<PainterWidget> {
   }
 }
 
+// TODO find a way to draw only last changes
 class DrawPainter extends CustomPainter {
   final List<DrawItem> _data;
   final Matrix4 _transform;
