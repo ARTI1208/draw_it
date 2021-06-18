@@ -1,6 +1,11 @@
 import 'package:draw_it/painting/models.dart';
 import 'package:flutter/widgets.dart';
 
+/*
+ TODO replace current implementation (too many switches) once dart supports
+  either methods in enums or when anonymous class instances
+ */
+
 enum PaintTool { MOVE, PENCIL, ERASER, LINE, RECTANGLE, OVAL }
 
 enum ChangeType { PAINT, REMOVE }
