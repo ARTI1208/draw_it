@@ -34,7 +34,6 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backwardsCompatibility: false,
         systemOverlayStyle: SystemUiOverlayStyle(statusBarColor: null),
         toolbarHeight: 0,
         elevation: 0,

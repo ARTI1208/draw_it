@@ -1,6 +1,5 @@
 import 'dart:math';
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:draw_it/extensions/collections.dart';
 import 'package:draw_it/extensions/platform.dart';
@@ -10,7 +9,6 @@ import 'package:draw_it/painting/enums.dart';
 import 'package:draw_it/painting/models.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart' as fcp;
 import 'package:matrix4_transform/matrix4_transform.dart';
 import 'package:matrix_gesture_detector/matrix_gesture_detector.dart';

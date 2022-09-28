@@ -1,9 +1,6 @@
-import 'dart:ui';
-
 import 'package:draw_it/painting/enums.dart';
 import 'package:draw_it/painting/models.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 enum LineSide { TOP, BOTTOM, LEFT, RIGHT }
