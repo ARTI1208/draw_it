@@ -2,70 +2,64 @@ import 'package:draw_it/painting/models.dart';
 import 'package:flutter/widgets.dart';
 
 /*
- TODO replace current implementation (too many switches) once dart supports
-  either methods in enums or when anonymous class instances
+ TODO
+  some methods can be made enum fields once dart support anonymous functions
+  as enum constructor parameter
  */
 
-enum PaintTool { MOVE, PENCIL, ERASER, LINE, RECTANGLE, OVAL }
+enum PaintTool {
+  MOVE("move.svg", hasThickness: false),
+  PENCIL("pencil.svg"),
+  ERASER("eraser.svg"),
+  LINE("line.svg"),
+  RECTANGLE("rectangle.svg", fillable: true),
+  OVAL("ellipse.svg", fillable: true);
+
+  final String _imageFileName;
+  final bool fillable;
+  final bool hasThickness;
+
+  const PaintTool(
+    this._imageFileName, {
+    this.fillable = false,
+    this.hasThickness = true,
+  });
+
+  String get imagePath => "assets/drawables/" + _imageFileName;
+}
 
 enum ChangeType { PAINT, REMOVE }
 
-enum PaintOption { FILLED }
+enum PaintOption {
+  FILLED("star_outline.svg", "star_filled.svg");
 
-enum PaintAction { UNDO, REDO, CLEAR, RESET_POSITION }
+  final String _imageOffFileName;
+  final String _imageOnFileName;
 
-extension VisualPaintType on PaintTool {
-  String get image {
-    switch (this) {
-      case PaintTool.PENCIL:
-        return "pencil.svg";
-      case PaintTool.ERASER:
-        return "eraser.svg";
-      case PaintTool.LINE:
-        return "line.svg";
-      case PaintTool.RECTANGLE:
-        return "rectangle.svg";
-      case PaintTool.OVAL:
-        return "ellipse.svg";
-      case PaintTool.MOVE:
-        return "move.svg";
-    }
-  }
+  const PaintOption(this._imageOffFileName, this._imageOnFileName);
 
-  String get imagePath => "assets/drawables/" + this.image;
+  String get imageOffPath => "assets/drawables/" + _imageOffFileName;
+
+  String get imageOnPath => "assets/drawables/" + _imageOnFileName;
+}
+
+enum PaintAction {
+  UNDO("undo.svg"),
+  REDO("redo.svg"),
+  CLEAR("delete.svg"),
+  RESET_POSITION("start_position.svg");
+
+  final String _imageFileName;
+
+  const PaintAction(this._imageFileName);
+
+  String get imagePath => "assets/drawables/" + _imageFileName;
 }
 
 extension PaintToolProperties on PaintTool {
-  bool get fillable {
-    switch (this) {
-      case PaintTool.MOVE:
-      case PaintTool.PENCIL:
-      case PaintTool.ERASER:
-      case PaintTool.LINE:
-        return false;
-      case PaintTool.RECTANGLE:
-      case PaintTool.OVAL:
-        return true;
-    }
-  }
-
-  bool get hasThickness {
-    switch (this) {
-      case PaintTool.PENCIL:
-      case PaintTool.ERASER:
-      case PaintTool.LINE:
-      case PaintTool.RECTANGLE:
-      case PaintTool.OVAL:
-        return true;
-      case PaintTool.MOVE:
-        return false;
-    }
-  }
-
   Paint setupPaint(Paint paint, DrawingState state) {
     // ignore: missing_enum_constant_in_switch
     switch (this) {
-
       case PaintTool.PENCIL:
         continue stroke_painting;
       case PaintTool.ERASER:
@@ -83,7 +77,6 @@ extension PaintToolProperties on PaintTool {
   void drawPath(Path path, Offset startPoint, Offset otherPoint) {
     // ignore: missing_enum_constant_in_switch
     switch (this) {
-
       case PaintTool.PENCIL:
       case PaintTool.ERASER:
         break;
@@ -98,47 +91,11 @@ extension PaintToolProperties on PaintTool {
         var width = (otherPoint.dx - startPoint.dx) * 2;
         var height = (otherPoint.dy - startPoint.dy) * 2;
 
-        path.addOval(Rect.fromCenter(center: startPoint, width: width, height: height));
+        path.addOval(
+            Rect.fromCenter(center: startPoint, width: width, height: height));
         break;
     }
   }
-}
-
-extension VisualPaintOption on PaintOption {
-  String get _imageOff {
-    switch (this) {
-      case PaintOption.FILLED:
-        return "star_outline.svg";
-    }
-  }
-
-  String get _imageOn {
-    switch (this) {
-      case PaintOption.FILLED:
-        return "star_filled.svg";
-    }
-  }
-
-  String get imageOffPath => "assets/drawables/" + this._imageOff;
-
-  String get imageOnPath => "assets/drawables/" + this._imageOn;
-}
-
-extension VisualPaintAction on PaintAction {
-  String get image {
-    switch (this) {
-      case PaintAction.UNDO:
-        return "undo.svg";
-      case PaintAction.REDO:
-        return "redo.svg";
-      case PaintAction.CLEAR:
-        return "delete.svg";
-      case PaintAction.RESET_POSITION:
-        return "start_position.svg";
-    }
-  }
-
-  String get imagePath => "assets/drawables/" + this.image;
 }
 
 extension PaintOptionModification on PaintOption {
@@ -154,7 +111,6 @@ extension PaintOptionModification on PaintOption {
 }
 
 extension PaintActionModifier on PaintAction {
-
   void _undoLast(DrawingState drawingState) {
     if (drawingState.undo.isEmpty) return;
 
@@ -200,7 +156,6 @@ extension PaintActionModifier on PaintAction {
 
   void onPressed(DrawingState drawingState) {
     switch (this) {
-
       case PaintAction.UNDO:
         _undoLast(drawingState);
         break;
@@ -217,9 +172,7 @@ extension PaintActionModifier on PaintAction {
   }
 
   bool isEnabled(DrawingState drawingState) {
-
     switch (this) {
-
       case PaintAction.UNDO:
         return drawingState.undo.isNotEmpty;
       case PaintAction.REDO:
